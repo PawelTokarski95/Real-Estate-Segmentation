@@ -1,0 +1,247 @@
+#The whole process of segmentation is divided into two parts in this case:
+#1: Statistical analysis, EDA and 'packing' the features into standardized PCA in order to provide the reduced-size data into KMeans model. 
+## After initial clustering, data stored in PCA will be restored to normal features with weights for each PC. It will be done through:
+## - assigning clusters to PC
+## - values of features will be calculated as their share in each PC and multiplying in by PC's values in every observations.
+## All the features that are multiplied by PC's will be then added across rows.
+## - standard operations as modelling. In this case I will use SVC and Decision Tree and choose the best by using precision, recall and accuracy scores.
+
+
+#Necessary libraries
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import davies_bouldin_score
+from sklearn.decomposition import PCA
+import scipy as stats
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import precision_score, recall_score, classification_report
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+
+#PART 1: EDA AND CLUSTERING PC'S
+
+#I import my dataset
+
+housing = pd.read_csv("C:/Users/pawel/...../housing.csv", sep=';', encoding='latin1')
+#First 5 observations
+
+housing.head()
+
+#Initial statistical analysis of dataset
+
+housing.describe()
+
+#I encode some of the variables in order for them to fit to numerical task
+le = LabelEncoder()
+encoded = []
+ohe = OneHotEncoder()
+columns = ['mainroad','guestroom', 'basement', 'hotwaterheating', 'airconditioning', 'prefarea', 'furnishing']
+for i in range(0,5):
+    encoded.append(le.fit_transform(housing.iloc[:,i+5]))
+
+
+encoded.append(le.fit_transform(housing['prefarea']))
+encoded.append(le.fit_transform(housing['furnishing']))
+
+
+encoded_all = pd.DataFrame({columns[0]: encoded[0], columns[1]: encoded[1], columns[2]: encoded[2], columns[3]: encoded[3], columns[4]: encoded[4], columns[5]: encoded[5], columns[6]: encoded[6]})
+for i in columns:
+    housing = housing.drop(i, axis=1)
+
+housingv2 = pd.concat([housing, encoded_all], axis=1)
+
+housingv2
+
+housingv2['price'].describe()
+
+
+# Fitting by using stadard scaller and normalizing observations.
+scaler = StandardScaler()
+
+# Scalling columns
+scaled_data = scaler.fit_transform(housingv2)
+
+columns = housingv2.columns
+
+scaled_df = pd.DataFrame(scaled_data, columns=columns)
+
+#Correlations map
+sns.heatmap(scaled_df.corr())
+
+
+#PCA - reducing the dimentionality of features to optimum.
+
+pca = PCA(n_components=0.9)
+pca_housing = pca.fit_transform(scaled_df)
+
+
+#In this case, I will use "10" as the value for PCA due to the fact that the reduction of variance is gradulally slower but not visibily steap - so it's not
+#not necessary to reduce also the number of PCA..
+plt.plot(range(1,11),np.cumsum(pca.explained_variance_ratio_))
+for i in range(1,10,1):
+    plt.axvline(i, color='g', linestyle='--')
+
+
+
+kmeans = []
+DB = []
+pca2 = PCA(n_components=10)
+pca_df = pca2.fit_transform(scaled_df)
+
+#Davis-Bouldin Method is a score by which an analyst may see the differences between the segments (clusters). The lower value - gradually better our
+##fitted clusters are.
+for i in range(2,20):
+    kmeans = KMeans(n_clusters=i, random_state=42)
+    kmeans.fit(pca_housing)
+    DB.append(davies_bouldin_score(scaled_df, kmeans.labels_))
+
+
+plt.plot(range(2, 20), DB, marker='o')
+plt.xlabel('Clusters number (k)')
+plt.ylabel('Davies-Bouldin Score')
+plt.title('Davies-Bouldin Method')
+plt.show()
+
+#By using Davis-Boulding score I conclude the best cluster number is 15 or 17, but I will choose 15.
+
+kmeansADJ = KMeans(n_clusters=15, random_state=42)
+kmeansADJ.fit(pca_housing)
+
+labels = kmeansADJ.labels_
+
+# Cetroids of clusters
+centroids = kmeansADJ.cluster_centers_
+
+#I also check the amount of explained variance by the number of PC - just for insight. 
+pca.explained_variance_ratio_
+
+plt.bar(x= range(0, 10), height=pca.explained_variance_ratio_)
+
+
+pd.DataFrame(pca.components_.T)
+x = []
+for i in range(1,11):
+    x.append(np.abs(pca.components_[:,i])/sum(np.abs(pca.components_[:,i]))*100)
+
+
+housing3 = pd.DataFrame(x, columns=['PC1', 'PC2', 'PC3', 'PC4', 'PC5',
+                               'PC6', 'PC7', 'PC8', 'PC9', 'PC10'],
+                   index=["Feature 1", "Feature 2", "Feature 3", "Feature 4", 
+                          "Feature 5", "Feature 6", "Feature 7", "Feature 8", 
+                          "Feature 9", "Feature 10"])
+
+PCA_housing = pd.DataFrame(pca_df, columns=['PC1', 'PC2', 'PC3', 'PC4', 'PC5',
+                               'PC6', 'PC7', 'PC8', 'PC9', 'PC10'])
+clusters = pd.Series(labels, name='Clusters', index=PCA_housing.index)
+
+# I concatenate two dataframes- PC's and clusters
+final_df = pd.concat([PCA_housing, clusters], axis=1)
+
+final_df
+
+result_weights1 = None 
+
+# Now I am counting the results in the following way (for every observation):
+# feature_share1*PC1 + feature_share2*PC2+ feature_share3*PC3 + feature_share4*PC4 + ... -> CLuster (number 'X' etc.)
+
+for i in range(len(final_df)):
+    result_matrix1 = np.dot(housing3['PC1'].values.T, final_df.iloc[i, 0])
+    result_matrix2 = np.dot(housing3['PC2'].values.T, final_df.iloc[i, 1])
+    result_matrix3 = np.dot(housing3['PC3'].values.T, final_df.iloc[i, 2])
+    result_matrix4 = np.dot(housing3['PC4'].values.T, final_df.iloc[i, 3])
+    result_matrix5 = np.dot(housing3['PC5'].values.T, final_df.iloc[i, 4])
+    result_matrix6 = np.dot(housing3['PC6'].values.T, final_df.iloc[i, 5])
+    result_matrix7 = np.dot(housing3['PC7'].values.T, final_df.iloc[i, 6])
+    result_matrix8 = np.dot(housing3['PC8'].values.T, final_df.iloc[i, 7])
+    result_matrix9 = np.dot(housing3['PC9'].values.T, final_df.iloc[i, 8])
+    result_matrix10 = np.dot(housing3['PC10'].values.T, final_df.iloc[i, 9])
+    
+    result_weights0 = pd.DataFrame([result_matrix1 + result_matrix2 + result_matrix3 + result_matrix4 + result_matrix5 + result_matrix6 + result_matrix7 + result_matrix8 + result_matrix9 + result_matrix10])
+    
+
+    if result_weights1 is None:
+        result_weights1 = pd.DataFrame(result_weights0)  # Inicjalizacja przy pierwszej iteracji
+    else:
+        result_weights1 = pd.concat([result_weights1, result_weights0], ignore_index=True)
+
+result_weights1.columns = ["Feature 1", "Feature 2", "Feature 3", "Feature 4", 
+                          "Feature 5", "Feature 6", "Feature 7", "Feature 8", 
+                          "Feature 9", "Feature 10"]
+
+
+Feature_df = pd.concat([result_weights1, final_df['Clusters']], axis=1)
+
+
+
+
+
+
+
+#PART 2: MODELING
+
+X = Feature_df[result_weights1.columns] #Features
+y = Feature_df['Clusters'] #Clusters
+
+#training and testing data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Modelling
+
+model = DecisionTreeClassifier()
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+print(classification_report(y_test, y_pred))
+
+
+model2 = SVC(kernel='rbf', decision_function_shape='ovr', random_state=42)
+model2.fit(X_train, y_train)
+y_pred = model2.predict(X_test)
+
+print(classification_report(y_test, y_pred))
+
+
+model3 = RandomForestClassifier()
+
+
+
+model3.fit(X_train, y_train)
+y_pred = model3.predict(X_test)
+print(classification_report(y_test, y_pred))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
