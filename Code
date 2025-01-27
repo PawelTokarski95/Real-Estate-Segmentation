@@ -110,7 +110,7 @@ plt.ylabel('Silhouette_score')
 plt.title('Silhouette Method')
 plt.show()
 
-#optimal value of cluters - 5
+#optimal value of cluters - 17
 #the number of clusters is based upon the compromise between both scores: Silhouette score and Davies-Bouldin score
 
 kmeansADJ = KMeans(n_clusters=5, random_state=42)
