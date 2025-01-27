@@ -113,7 +113,7 @@ plt.show()
 #optimal value of cluters - 17
 #the number of clusters is based upon the compromise between both scores: Silhouette score and Davies-Bouldin score
 
-kmeansADJ = KMeans(n_clusters=5, random_state=42)
+kmeansADJ = KMeans(n_clusters=17, random_state=42)
 kmeansADJ.fit(scaled_data)
 
 
