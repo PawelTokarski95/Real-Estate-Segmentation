@@ -1,5 +1,5 @@
 # Real-Estate-Segmentation
-- **Language**: R 4.2  
+- **Language**: Python
 
 
 The purpose of this project was to create a segmenation process of housing and prediction of the next segmentations. Basically, my dataset consists of a set of features for which clusters are to be assigned. The clusters determine the classification into real estate categories along with these features, making this process potentially significant for both analytical teams and developers themselves. This allows for easier segmentation of offers, such as pricing, and tailoring them to specific target groups.​​
